@@ -1,7 +1,7 @@
 import { data, save, uid } from '../store.js';
 import { h, go, toast, modal, confirmBox, formatAddress, myAddress, fmtDate, showPrint } from '../ui.js';
 import { TEMPLATES, LABEL_CATEGORIES, searchTemplates, findTemplate, customTemplate, labelRect } from '../templates.js';
-import { FONTS, planLabels, layoutLabel, drawOpsCanvas, labelsPdf } from '../engine.js';
+import { FONTS, ensureFont, planLabels, layoutLabel, drawOpsCanvas, labelsPdf } from '../engine.js';
 import { CLIPART, emojiPng, readPhoto } from '../pictures.js';
 import { addressPicker } from './addresses.js';
 import { printTips } from './settings.js';
@@ -204,6 +204,8 @@ export function labelEditorView({ id, templateId }) {
   let drawing = 0;
   async function redraw() {
     const my = ++drawing;
+    await ensureFont(design.style.font);
+    if (my !== drawing) return;
     const plan = planLabels(t, design, data.addresses, formatAddress);
     page = Math.max(0, Math.min(page, plan.pages.length - 1));
     const cw = Math.min(canvas.parentElement ? canvas.parentElement.clientWidth - 32 : 600, 720);
@@ -349,7 +351,7 @@ export function labelEditorView({ id, templateId }) {
     const s = design.style;
     lookEl.innerHTML = '';
     const size = h('output', String(s.size));
-    const fonts = h('div.seg', FONTS.map(f => h('button.btn' + (s.font === f.id ? '.on' : ''), { style: { fontFamily: f.css }, onclick: () => { s.font = f.id; drawLook(); changed(); } }, f.name)));
+    const fonts = h('div.font-pick', FONTS.map(f => h('button.btn' + (s.font === f.id ? '.on' : ''), { style: { fontFamily: f.css }, onclick: () => { s.font = f.id; drawLook(); changed(); } }, f.name)));
     lookEl.replaceChildren(...[
       h('div', h('b', 'Lettering'), fonts),
       h('div.row', h('b', 'Size'),

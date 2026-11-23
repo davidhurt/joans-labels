@@ -291,3 +291,18 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
 .sheetmap .mapbtn.off { background: #8a939e; color: #fff; border-color: #6d7680; }
 .sheetmap .rowbtn { width: 2.4rem; min-height: 0; }
 .sheetmap .cell:focus-visible, .sheetmap .mapbtn:focus-visible { outline: 3px solid #f5b400; outline-offset: 1px; }
+
+/* ---------- extra lettering (free Google fonts, see fonts/OFL-*.txt) ---------- */
+@font-face { font-family: "JL Lato"; src: url(../fonts/Lato-Regular.ttf); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "JL Lato"; src: url(../fonts/Lato-Bold.ttf); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "JL Lato"; src: url(../fonts/Lato-Italic.ttf); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "JL Lato"; src: url(../fonts/Lato-BoldItalic.ttf); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "JL Crimson"; src: url(../fonts/CrimsonText-Regular.ttf); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "JL Crimson"; src: url(../fonts/CrimsonText-Bold.ttf); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "JL Crimson"; src: url(../fonts/CrimsonText-Italic.ttf); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "JL Crimson"; src: url(../fonts/CrimsonText-BoldItalic.ttf); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "JL Patrick"; src: url(../fonts/PatrickHand-Regular.ttf); font-display: swap; }
+@font-face { font-family: "JL GreatVibes"; src: url(../fonts/GreatVibes-Regular.ttf); font-display: swap; }
+.font-pick { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.font-pick .btn { font-size: 1.1rem; font-weight: 400; min-height: 50px; justify-content: flex-start; }
+.font-pick .btn.on { font-weight: 400; }

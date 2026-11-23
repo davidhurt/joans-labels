@@ -1,5 +1,5 @@
 // Lets the app open even without internet, and picks up updates automatically.
-const CACHE = 'jll-v2';
+const CACHE = 'jll-v3';
 const FILES = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'vendor/jspdf.umd.min.js',
   'js/app.js', 'js/store.js', 'js/ui.js', 'js/engine.js', 'js/templates.js', 'js/pictures.js',
@@ -18,7 +18,9 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    // 'no-cache' asks the server whether a file changed, so updates show up right away.
+    fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
+      if (!res.ok) return res;
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;

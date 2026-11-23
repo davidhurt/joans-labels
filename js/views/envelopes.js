@@ -1,7 +1,7 @@
 import { data, save } from '../store.js';
 import { h, toast, formatAddress, myAddress, showPrint, isSafari } from '../ui.js';
 import { ENVELOPES, findEnvelope } from '../templates.js';
-import { FONTS, layoutEnvelope, drawOpsCanvas, envelopesPdf } from '../engine.js';
+import { FONTS, ensureFont, layoutEnvelope, drawOpsCanvas, envelopesPdf } from '../engine.js';
 import { addressPicker } from './addresses.js';
 
 export function envelopesView(params) {
@@ -62,7 +62,7 @@ export function envelopesView(params) {
     lookEl.innerHTML = '';
     const size = h('output', String(st.size_pt));
     lookEl.append(
-      h('div.seg', FONTS.map(f => h('button.btn' + (st.font === f.id ? '.on' : ''), { style: { fontFamily: f.css }, onclick: () => { st.font = f.id; persist(); drawLook(); redraw(); } }, f.name))),
+      h('div.font-pick', FONTS.map(f => h('button.btn' + (st.font === f.id ? '.on' : ''), { style: { fontFamily: f.css }, onclick: () => { st.font = f.id; persist(); drawLook(); redraw(); } }, f.name))),
       h('div.row', h('b', 'Size'), h('span.stepper',
         h('button.btn', { 'aria-label': 'Smaller', onclick: () => { st.size_pt = Math.max(9, st.size_pt - 1); size.textContent = st.size_pt; persist(); redraw(); } }, '−'), size,
         h('button.btn', { 'aria-label': 'Bigger', onclick: () => { st.size_pt = Math.min(28, st.size_pt + 1); size.textContent = st.size_pt; persist(); redraw(); } }, '+')),
@@ -84,6 +84,8 @@ export function envelopesView(params) {
   let drawing = 0;
   async function redraw() {
     const my = ++drawing;
+    await ensureFont(st.font);
+    if (my !== drawing) return;
     const e = env(), L = list();
     idx = Math.max(0, Math.min(idx, L.length - 1));
     const item = L[idx] || { to: '', from: st.useReturn ? fromText : '' };

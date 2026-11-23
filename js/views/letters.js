@@ -158,11 +158,14 @@ export function letterEditorView(id) {
     h('option', { value: '5' }, 'Extra large'), h('option', { value: '6' }, 'Huge'));
   const fontSel = h('select', { 'aria-label': 'Lettering', onchange: (e) => { paper.focus(); restoreSel(); document.execCommand('fontName', false, e.target.value); e.target.value = ''; persist(); } },
     h('option', { value: '' }, 'Lettering…'),
-    h('option', { value: 'Times New Roman', style: { fontFamily: 'Times New Roman' } }, 'Classic'),
-    h('option', { value: 'Helvetica', style: { fontFamily: 'Helvetica' } }, 'Clear'),
-    h('option', { value: 'Georgia', style: { fontFamily: 'Georgia' } }, 'Book'),
-    h('option', { value: 'Snell Roundhand, Apple Chancery, cursive', style: { fontFamily: 'Snell Roundhand, cursive' } }, 'Handwriting'),
-    h('option', { value: 'Courier New', style: { fontFamily: 'Courier New' } }, 'Typewriter'));
+    h('option', { value: 'Helvetica' }, 'Helvetica'),
+    h('option', { value: 'JL Lato' }, 'Modern'),
+    h('option', { value: 'Times New Roman' }, 'Classic'),
+    h('option', { value: 'JL Crimson' }, 'Elegant'),
+    h('option', { value: 'Georgia' }, 'Book'),
+    h('option', { value: 'JL Patrick' }, 'Handwritten'),
+    h('option', { value: 'JL GreatVibes' }, 'Fancy Script'),
+    h('option', { value: 'Courier New' }, 'Typewriter'));
   // Remember the selection while a dropdown is open
   let savedRange = null;
   const remember = () => { const s = getSelection(); if (s.rangeCount && paper.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange(); };
@@ -226,7 +229,7 @@ export function letterEditorView(id) {
       savedNote),
     h('div.toolbar',
       B(h('b', 'B'), 'bold', null, { title: 'Bold' }), B(h('i', 'I'), 'italic', null, { title: 'Slanted' }), B(h('u', 'U'), 'underline', null, { title: 'Underline' }),
-      h('span.sep'), keepFocus(sizeSel), keepFocus(fontSel), keepFocus(colorSel),
+      h('span.sep'), sizeSel, fontSel, colorSel,
       h('span.sep'), B('☰ Left', 'justifyLeft'), B('≡ Center', 'justifyCenter'), B('Right ☰', 'justifyRight'),
       h('span.sep'), B('• List', 'insertUnorderedList'),
       keepFocus(h('button.btn', { onclick: () => { remember(); photoIn.click(); } }, '🖼️ Picture')), photoIn,

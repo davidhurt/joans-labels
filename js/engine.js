@@ -6,16 +6,72 @@ import { labelRect } from './templates.js';
 const { jsPDF } = window.jspdf;
 const measurer = new jsPDF({ unit: 'in', format: 'letter' });
 
+// Lettering choices. The three "builtin" ones are part of every PDF;
+// the others are free Google fonts (in /fonts) that get loaded when chosen.
 export const FONTS = [
-  { id: 'helvetica', name: 'Clear', css: 'Helvetica, Arial, sans-serif' },
-  { id: 'times', name: 'Classic', css: '"Times New Roman", Times, serif' },
-  { id: 'courier', name: 'Typewriter', css: '"Courier New", Courier, monospace' },
+  { id: 'helvetica', name: 'Helvetica', css: 'Helvetica, Arial, sans-serif', builtin: true },
+  { id: 'lato', name: 'Modern', css: '"JL Lato", Helvetica, sans-serif',
+    files: { normal: 'Lato-Regular.ttf', bold: 'Lato-Bold.ttf', italic: 'Lato-Italic.ttf', bolditalic: 'Lato-BoldItalic.ttf' } },
+  { id: 'times', name: 'Classic', css: '"Times New Roman", Times, serif', builtin: true },
+  { id: 'crimson', name: 'Elegant', css: '"JL Crimson", Georgia, serif',
+    files: { normal: 'CrimsonText-Regular.ttf', bold: 'CrimsonText-Bold.ttf', italic: 'CrimsonText-Italic.ttf', bolditalic: 'CrimsonText-BoldItalic.ttf' } },
+  { id: 'patrick', name: 'Handwritten', css: '"JL Patrick", "Comic Sans MS", cursive', files: { normal: 'PatrickHand-Regular.ttf' } },
+  { id: 'greatvibes', name: 'Fancy Script', css: '"JL GreatVibes", "Snell Roundhand", cursive', files: { normal: 'GreatVibes-Regular.ttf' } },
+  { id: 'courier', name: 'Typewriter', css: '"Courier New", Courier, monospace', builtin: true },
 ];
-export function fontCss(id) { return (FONTS.find(f => f.id === id) || FONTS[0]).css; }
+const fontById = (id) => FONTS.find(f => f.id === id) || FONTS[0];
+export function fontCss(id) { return fontById(id).css; }
 
-function pdfStyle(s) {
+function wantedStyle(s) {
   return s.bold && s.italic ? 'bolditalic' : s.bold ? 'bold' : s.italic ? 'italic' : 'normal';
 }
+/** The closest style this font really has (script fonts have no bold). */
+function pdfStyle(s, fontId = s.font) {
+  const want = wantedStyle(s);
+  const f = fontById(fontId);
+  if (f.builtin || !f.files) return want;
+  for (const st of [want, want === 'bolditalic' ? 'bold' : null, want === 'bolditalic' ? 'italic' : null, 'normal']) {
+    if (st && f.files[st]) return st;
+  }
+  return 'normal';
+}
+
+// ---- loading the extra fonts ----
+const fontData = {};          // file name -> base64 text
+const loaded = new Set();     // font ids ready to use
+const loading = {};
+async function fileB64(file) {
+  if (fontData[file]) return fontData[file];
+  const buf = new Uint8Array(await (await fetch(`fonts/${file}`)).arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  return (fontData[file] = btoa(bin));
+}
+function registerIn(doc, f) {
+  for (const [st, file] of Object.entries(f.files)) {
+    doc.addFileToVFS(file, fontData[file]);
+    doc.addFont(file, f.id, st);
+  }
+}
+/** Make sure a font is ready for measuring, the screen picture and the PDF. */
+export function ensureFont(id) {
+  const f = fontById(id);
+  if (f.builtin || loaded.has(f.id)) return Promise.resolve();
+  if (!loading[f.id]) {
+    loading[f.id] = (async () => {
+      await Promise.all(Object.values(f.files).map(fileB64));
+      registerIn(measurer, f);
+      const fam = f.css.split(',')[0];
+      await Promise.all(Object.keys(f.files).map(st => document.fonts.load(
+        `${st.includes('italic') ? 'italic ' : ''}${st.includes('bold') ? 'bold ' : ''}16px ${fam}`).catch(() => {})));
+      loaded.add(f.id);
+    })().catch((e) => { console.warn('Font failed to load', id, e); delete loading[f.id]; });
+  }
+  return loading[f.id];
+}
+function usable(id) { const f = fontById(id); return f.builtin || loaded.has(f.id) ? f.id : 'helvetica'; }
+/** Put the chosen extra font (if any) into a new PDF. */
+function registerFor(doc, id) { const f = fontById(id); if (!f.builtin && loaded.has(f.id)) registerIn(doc, f); }
 
 /** Replace characters the PDF fonts cannot show. */
 export function cleanText(str) {
@@ -26,7 +82,8 @@ export function cleanText(str) {
 }
 
 export function textWidth(str, font, style, sizePt) {
-  measurer.setFont(font, pdfStyle(style));
+  const id = usable(font);
+  measurer.setFont(id, pdfStyle(style, id));
   return measurer.getStringUnitWidth(str) * sizePt / 72;
 }
 
@@ -93,7 +150,8 @@ export function layoutText(text, style, box, opts = {}) {
     let x = blockX;
     if (align === 'center') x = box.x + box.w / 2;
     if (align === 'right') x = box.x + box.w;
-    ops.push({ type: 'text', x, y: base, str, size, font: style.font, fstyle: pdfStyle(style), color: style.color || '#000000', align });
+    const fid = usable(style.font);
+    ops.push({ type: 'text', x, y: base, str, size, font: fid, fstyle: pdfStyle(style, fid), color: style.color || '#000000', align });
   });
   return { ops, size, shrunk: size < style.size - 0.01 };
 }
@@ -257,7 +315,9 @@ export async function drawOpsPdf(doc, ops, tf) {
 
 /** Build a PDF of label sheets. */
 export async function labelsPdf(t, design, plan, nudge, { test = false } = {}) {
+  await ensureFont(design.style.font);
   const doc = new jsPDF({ unit: 'in', format: [t.pageW, t.pageH], orientation: t.pageW > t.pageH ? 'landscape' : 'portrait' });
+  registerFor(doc, design.style.font);
   const tf = makeTransform(t.pageW, t.pageH, nudge);
   for (let p = 0; p < plan.pages.length; p++) {
     if (p > 0) doc.addPage([t.pageW, t.pageH], t.pageW > t.pageH ? 'landscape' : 'portrait');
@@ -299,7 +359,9 @@ export function layoutEnvelope(env, to, from, style) {
 }
 
 export async function envelopesPdf(env, list, style) {
+  await ensureFont(style.font);
   const doc = new jsPDF({ unit: 'in', format: [env.w, env.h], orientation: 'landscape' });
+  registerFor(doc, style.font);
   const tf = makeTransform(env.w, env.h, null);
   for (let i = 0; i < list.length; i++) {
     if (i > 0) doc.addPage([env.w, env.h], 'landscape');
