@@ -218,7 +218,7 @@ export function labelEditorView({ id, templateId }) {
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, t.pageW, t.pageH);
     const cells = plan.pages[page] || [];
     const used = new Set(cells.map(c => c.index));
-    let shrunk = false;
+    let shrunk = false, overflow = false;
     for (let i = 0; i < t.count; i++) {
       const r = labelRect(t, i);
       ctx.beginPath();
@@ -244,6 +244,7 @@ export function labelEditorView({ id, templateId }) {
       const r = labelRect(t, cell.index);
       const res = layoutLabel(t, r, cell.text, design);
       if (res.shrunk) shrunk = true;
+      if (res.overflow) overflow = true;
       await drawOpsCanvas(ctx, res.ops);
       if (my !== drawing) return;
     }
@@ -261,7 +262,8 @@ export function labelEditorView({ id, templateId }) {
     prevBtn.style.display = nextBtn.style.display = plan.pages.length > 1 ? '' : 'none';
     prevBtn.disabled = page === 0; nextBtn.disabled = page >= plan.pages.length - 1;
     fitNote.innerHTML = '';
-    if (shrunk) fitNote.append(h('p.note.small', 'ℹ️ Some writing was made a little smaller so it fits on the label.'));
+    if (overflow) fitNote.append(h('p.note.small', '⚠️ There is too much writing to fit on these labels, so the last line is left off. Use fewer lines or a bigger label.'));
+    else if (shrunk) fitNote.append(h('p.note.small', 'ℹ️ Some writing was made a little smaller so it fits on the label.'));
     if (design.partial && (design.used || []).length >= t.count && design.mode !== 'each') fitNote.append(h('p.note.small', '⚠️ Every label on your sheet is marked as used, so this will print on a new sheet. Click the empty ones to use them.'));
     hint.textContent = design.mode === 'each' ? '👆 Click any label to type on it.' : design.partial ? '👆 Click a label on the sheet to mark it used (grey) or empty.' : '';
   }
@@ -274,6 +276,7 @@ export function labelEditorView({ id, templateId }) {
       const r = labelRect(t, i);
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
         if (design.mode === 'each') {
+          if (design.partial && (design.used || []).includes(i)) { toast('That label is marked as already used. Pick a white one.'); return; }
           selected = i; drawContent(); redraw();
           setTimeout(() => { const ta = contentEl.querySelector('textarea'); if (ta) ta.focus(); }, 10);
         } else if (design.partial && page === 0) {
@@ -330,18 +333,25 @@ export function labelEditorView({ id, templateId }) {
             h('button.btn', { 'aria-label': 'More sheets', onclick: () => { design.sheets = Math.min(50, (design.sheets || 1) + 1); sheets.textContent = design.sheets; changed(); } }, '+'))));
     } else {
       design.each = design.each || {};
+      const gone = design.partial ? new Set(design.used || []) : new Set();
+      if (gone.has(selected)) { const free = Array.from({ length: t.count }, (_, i) => i).find(i => !gone.has(i)); if (free != null) selected = free; }
       const ta = h('textarea', { value: design.each[selected] || '', 'aria-label': `Text for label ${selected + 1}`,
         placeholder: 'Type on this label…', oninput: (e) => { design.each[selected] = e.target.value; changed(); } });
-      contentEl.append(
+      // Previous/Next skip labels that are already used.
+      const step = (d) => { for (let i = selected + d; i >= 0 && i < t.count; i += d) if (!gone.has(i)) return i; return -1; };
+      const prevI = step(-1), nextI = step(1);
+      contentEl.append(...[
         h('p', h('b', `Label ${selected + 1} of ${t.count}`), h('span.muted', ' — click another label on the sheet to type on it.')),
+        gone.has(selected) ? h('p.note.small', '⚠️ Every label is marked as already used, so nothing will print.') : null,
         ta,
         h('div.row',
-          h('button.btn', { disabled: selected <= 0, onclick: () => { selected--; drawContent(); redraw(); } }, '◀ Previous label'),
-          h('button.btn', { disabled: selected >= t.count - 1, onclick: () => { selected++; drawContent(); redraw(); } }, 'Next label ▶')),
+          h('button.btn', { disabled: prevI < 0, onclick: () => { selected = prevI; drawContent(); redraw(); } }, '◀ Previous label'),
+          h('button.btn', { disabled: nextI < 0, onclick: () => { selected = nextI; drawContent(); redraw(); } }, 'Next label ▶')),
         h('div.row',
           h('button.btn', { onclick: () => { const v = design.each[selected] || ''; for (let i = 0; i < t.count; i++) if (!(design.each[i] || '').trim()) design.each[i] = v; changed(); toast('Copied to every empty label'); } }, '📋 Copy this to all empty labels'),
-          h('button.btn.danger', { onclick: async () => { if (await confirmBox('Clear all labels?', 'This wipes the writing from every label on the sheet.', 'Yes, clear')) { design.each = {}; drawContent(); changed(); } } }, 'Clear all')));
-      setTimeout(() => ta.focus(), 0);
+          h('button.btn.danger', { onclick: async () => { if (await confirmBox('Clear all labels?', 'This wipes the writing from every label on the sheet.', 'Yes, clear')) { design.each = {}; drawContent(); changed(); } } }, 'Clear all')),
+      ].filter(Boolean));
+      setTimeout(() => ta.focus({ preventScroll: true }), 0);
     }
   };
 
@@ -397,7 +407,7 @@ export function labelEditorView({ id, templateId }) {
     const s = usedSet();
     for (const i of indices) { if (makeUsed) s.add(i); else s.delete(i); }
     design.used = [...s].sort((a, b) => a - b);
-    page = 0; drawStart(); changed();
+    page = 0; drawStart(); if (design.mode === 'each') drawContent(); changed();
   };
   const toggleOne = (i) => setUsed([i], !usedSet().has(i));
   // A whole row/column: if any label in it is still empty, mark them all used; otherwise make them all empty.

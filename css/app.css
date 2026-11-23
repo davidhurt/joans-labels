@@ -264,12 +264,18 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
 
 /* ---------- printing letters ---------- */
 #print-area { display: none; }
-@page { size: letter; margin: 1in; }
+/* Page margin 0 stops Chrome/Safari printing the date, title and web address.
+   The 1-inch margins come from the table's repeating top/bottom rows instead. */
+@page { size: letter; margin: 0; }
 @media print {
   html, body { background: #fff !important; }
   body > *:not(#print-area) { display: none !important; }
   #print-area { display: block !important; font-family: "Times New Roman", Times, serif; font-size: 13pt; line-height: 1.45; color: #000; }
   #print-area p { margin: 0 0 .9em; }
+  #print-area table.print-page { width: 100%; border-collapse: collapse; }
+  #print-area td { padding: 0; vertical-align: top; }
+  #print-area td.pm { height: 1in; }
+  #print-area td.pc { padding: 0 1in; }
   #print-area img { max-width: 100%; height: auto; page-break-inside: avoid; }
   #print-area .fill { background: none; box-shadow: none; }
   #print-area font[size="2"] { font-size: 11pt; }
@@ -306,3 +312,16 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
 .font-pick { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
 .font-pick .btn { font-size: 1.1rem; font-weight: 400; min-height: 50px; justify-content: flex-start; }
 .font-pick .btn.on { font-weight: 400; }
+
+/* ---------- small screens ---------- */
+.editor > *, .panel > *, .pick > span { min-width: 0; }
+.pick > span { overflow-wrap: anywhere; }
+.page-head .grow { min-width: 220px; }
+@media (max-width: 600px) {
+  .page-head .grow { flex-basis: 100%; }
+  .title-input { max-width: none; }
+  .ab-table td { display: block; text-align: left !important; white-space: normal !important; border-bottom: 0; padding: .4rem .8rem; }
+  .ab-table tr { display: block; border-bottom: 1px solid #eef0f3; padding: .4rem 0; }
+  .item { flex-wrap: wrap; }
+  .print-side .btn.huge { font-size: 1.15rem; }
+}

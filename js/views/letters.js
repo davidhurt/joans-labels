@@ -95,11 +95,26 @@ function create(t, to) {
 }
 
 // ---------- editor ----------
+/** Keep only safe formatting (letters can come back from a backup file). */
+export function cleanHtml(html) {
+  const doc = new DOMParser().parseFromString(`<div>${html || ''}</div>`, 'text/html');
+  doc.querySelectorAll('script,style,iframe,object,embed,link,meta,form,input,button,textarea,select').forEach(n => n.remove());
+  doc.querySelectorAll('*').forEach(el => {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase(), v = a.value.trim().toLowerCase();
+      const badSrc = n === 'src' && !v.startsWith('data:image/');
+      const badLink = ['href', 'xlink:href', 'action', 'formaction'].includes(n) && !(v.startsWith('#') || v.startsWith('http'));
+      if (n.startsWith('on') || badSrc || badLink) el.removeAttribute(a.name);
+    }
+  });
+  return doc.body.firstChild.innerHTML;
+}
+
 export function letterEditorView(id) {
   const l = data.letters.find(x => x.id === id);
   if (!l) { setTimeout(() => go('#/letters'), 0); return h('p', 'Not found.'); }
   const savedNote = h('span.small.muted', '✔ Saved');
-  const paper = h('div.paper', { contentEditable: 'true', spellcheck: true, html: l.html, 'aria-label': 'Your letter' });
+  const paper = h('div.paper', { contentEditable: 'true', spellcheck: true, html: cleanHtml(l.html), 'aria-label': 'Your letter' });
 
   const persist = () => {
     l.html = paper.innerHTML; l.updated = Date.now(); save('letters');
@@ -205,7 +220,10 @@ export function letterEditorView(id) {
     }
     persist();
     const area = document.getElementById('print-area');
-    area.innerHTML = paper.innerHTML;
+    // The empty header/footer rows repeat on every page and make the top and bottom margins.
+    area.innerHTML = '<table class="print-page"><thead><tr><td class="pm"></td></tr></thead>'
+      + `<tbody><tr><td class="pc">${paper.innerHTML}</td></tr></tbody>`
+      + '<tfoot><tr><td class="pm"></td></tr></tfoot></table>';
     setTimeout(() => { window.print(); }, 50);
   };
 

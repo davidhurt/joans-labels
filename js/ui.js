@@ -41,10 +41,19 @@ export function toast(msg, kind = '') {
   toastTimer = setTimeout(() => { t.className = ''; }, 3200);
 }
 
+const openModals = new Set();
+/** Close every pop-up (used when she moves to another screen). */
+export function closeAllModals() { [...openModals].forEach(c => c()); }
+
 /** A friendly pop-up window. Returns {el, close}. */
 export function modal(title, body, { wide = false, onClose } = {}) {
   const back = h('div.modal-back');
-  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); onClose && onClose(); };
+  let closed = false;
+  const close = () => {
+    if (closed) return; closed = true; openModals.delete(close);
+    back.remove(); document.removeEventListener('keydown', onKey); onClose && onClose();
+  };
+  openModals.add(close);
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   const box = h('div.modal' + (wide ? '.wide' : ''), { role: 'dialog', 'aria-modal': 'true', 'aria-label': title },

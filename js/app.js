@@ -1,5 +1,5 @@
 import { load, data, save } from './store.js';
-import { h, toast } from './ui.js';
+import { h, toast, closeAllModals } from './ui.js';
 import { homeView } from './views/home.js';
 import { labelsView, labelEditorView } from './views/labels.js';
 import { envelopesView } from './views/envelopes.js';
@@ -27,6 +27,7 @@ const routes = [
 function render() {
   const hash = location.hash || '#/';
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
+  closeAllModals();
   for (const [re, nav, fn] of routes) {
     const m = hash.match(re);
     if (m) {

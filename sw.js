@@ -1,5 +1,5 @@
 // Lets the app open even without internet, and picks up updates automatically.
-const CACHE = 'jll-v3';
+const CACHE = 'jll-v4';
 const FILES = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'vendor/jspdf.umd.min.js',
   'js/app.js', 'js/store.js', 'js/ui.js', 'js/engine.js', 'js/templates.js', 'js/pictures.js',

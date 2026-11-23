@@ -1,0 +1,9 @@
+{
+  "name": "joans-labels",
+  "private": true,
+  "type": "module",
+  "description": "Print Avery labels, envelopes and letters at home",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

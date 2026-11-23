@@ -46,7 +46,7 @@ add({ sku: 5167, cat: 'return', name: 'Return Address Labels (small)', size: '½
   also: [5267, 6467, 8167, 8667, 8927, 15267, 15667, 18167, 18667, 48267, 48467, 48767] });
 add({ sku: 5195, cat: 'return', name: 'Return Address Labels', size: '⅔" × 1¾"',
   w: 1.75, h: 2 / 3, cols: 4, rows: 15, left: 0.28125, top: 0.5, hp: 2.0625, vp: 2 / 3,
-  also: [5155, 6460, 8195, 15695, 18195, 18295, 48335] });
+  also: [5155, 8195, 15695, 18195, 18295, 48335] });
 
 // ---------- Shipping ----------
 add({ sku: 5163, cat: 'shipping', name: 'Shipping Labels', size: '2" × 4"',

@@ -137,6 +137,14 @@ export function layoutText(text, style, box, opts = {}) {
   if (va === 'top') y = box.y;
   else if (va === 'bottom') y = box.y + box.h - blockH;
   else y = box.y + (box.h - blockH) / 2;
+  // Too much writing even at the smallest size: start at the top and leave off
+  // lines that would spill onto the next label (the screen warns her).
+  let overflow = false;
+  if (blockH > box.h + 1e-6) {
+    y = box.y;
+    const fit = Math.max(1, Math.floor((box.h + 1e-6) / lh));
+    if (fit < lines.length) { lines = lines.slice(0, fit); overflow = true; }
+  }
   const ops = [];
   const align = style.align || 'left';
   // Left-aligned blocks are centred as a block (like Avery does) when asked.
@@ -153,7 +161,7 @@ export function layoutText(text, style, box, opts = {}) {
     const fid = usable(style.font);
     ops.push({ type: 'text', x, y: base, str, size, font: fid, fstyle: pdfStyle(style, fid), color: style.color || '#000000', align });
   });
-  return { ops, size, shrunk: size < style.size - 0.01 };
+  return { ops, size, shrunk: size < style.size - 0.01, overflow };
 }
 
 // ---------- labels ----------
@@ -174,7 +182,7 @@ export function layoutLabel(t, r, text, design) {
   const style = design.style;
   let box = innerBox(t, r);
   const ops = [];
-  let shrunk = false;
+  let shrunk = false, overflow = false;
   const pic = design.picture;
   const hasText = String(text || '').trim().length > 0;
   if (pic && pic.src) {
@@ -200,8 +208,9 @@ export function layoutLabel(t, r, text, design) {
     const res = layoutText(text, style, box, { centerBlock: style.align === 'left' && style.centerBlock !== false });
     ops.push(...res.ops);
     shrunk = res.shrunk;
+    overflow = res.overflow;
   }
-  return { ops, shrunk };
+  return { ops, shrunk, overflow };
 }
 
 /**
@@ -247,7 +256,8 @@ export function planLabels(t, design, addresses, formatAddress) {
     idx++;
   }
   if (page.length || !pages.length) pages.push(page);
-  return { pages, total: items.length, usedFirst: used };
+  // Blank labels do not count (nothing would print).
+  return { pages, total: items.filter(x => String(x).trim()).length, usedFirst: used };
 }
 
 // ---------- drawing ----------

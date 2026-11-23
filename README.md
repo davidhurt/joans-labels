@@ -5,7 +5,7 @@ A simple web app for printing Avery labels, envelopes and letters at home. No si
 ## Run it on this Mac
 
 ```bash
-cd "/Users/davidsmini/Joans Labels and Docs" && python3 -m http.server 8765
+cd "/Users/davidsmini/Claude Code/Joans Labels and Docs" && python3 -m http.server 8765
 ```
 
 Then open http://localhost:8765 in Safari and in Chrome.
@@ -29,3 +29,11 @@ If labels are slightly off on her printer: My Info & Printer Setup → move left
 - `js/views/*` — each screen
 - `vendor/jspdf.umd.min.js` — PDF library (jsPDF 2.5.1)
 - `sw.js` — lets it open offline; bump `CACHE` when publishing updates
+
+## Automated tests
+
+```bash
+npm test
+```
+
+Checks every Avery template's geometry, text fitting, sheet planning (used labels, extra sheets), PDF output for every template, font and envelope size, and address-book imports (Mac Contacts vCard, Excel/Numbers CSV).
