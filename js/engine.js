@@ -151,7 +151,12 @@ export function layoutLabel(t, r, text, design) {
  * Returns { pages: [ [ {index, text} ... ] ], total }
  */
 export function planLabels(t, design, addresses, formatAddress) {
-  const start = Math.min(design.startAt || 0, t.count - 1);
+  // Labels already peeled off the first sheet (only when she said the sheet is partly used).
+  const used = new Set(design.partial ? (design.used || []).filter(i => i >= 0 && i < t.count) : []);
+  if (!design.partial && design.startAt) for (let i = 0; i < Math.min(design.startAt, t.count); i++) used.add(i);
+  // Every label used? Then there is nothing to print on that sheet: start on a fresh one.
+  if (used.size >= t.count && design.mode !== 'each') used.clear();
+  const free0 = t.count - used.size;
   const items = [];
   if (design.mode === 'addresses') {
     const ids = design.addressIds || [];
@@ -163,26 +168,28 @@ export function planLabels(t, design, addresses, formatAddress) {
     }
   } else if (design.mode === 'same') {
     const sheets = Math.max(1, design.sheets || 1);
-    const n = (t.count - start) + (sheets - 1) * t.count;
+    const n = free0 + (sheets - 1) * t.count;
     for (let i = 0; i < n; i++) items.push(design.text || '');
   } else {
-    // each label different, one sheet
+    // each label different, one sheet; used labels are left alone
     const pages = [[]];
     for (let i = 0; i < t.count; i++) {
-      const tx = (design.each || {})[i] || '';
-      if (i >= start) pages[0].push({ index: i, text: tx });
+      if (used.has(i)) continue;
+      pages[0].push({ index: i, text: (design.each || {})[i] || '' });
     }
-    return { pages, total: pages[0].filter(p => p.text.trim()).length };
+    return { pages, total: pages[0].filter(p => p.text.trim()).length, usedFirst: used };
   }
   const pages = [];
-  let page = [], idx = start;
+  let page = [], idx = 0, p = 0;
+  const skip = (i) => p === 0 && used.has(i);
   for (const text of items) {
-    if (idx >= t.count) { pages.push(page); page = []; idx = 0; }
+    while (idx < t.count && skip(idx)) idx++;
+    if (idx >= t.count) { pages.push(page); page = []; idx = 0; p++; }
     page.push({ index: idx, text });
     idx++;
   }
   if (page.length || !pages.length) pages.push(page);
-  return { pages, total: items.length };
+  return { pages, total: items.length, usedFirst: used };
 }
 
 // ---------- drawing ----------

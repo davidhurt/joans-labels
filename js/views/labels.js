@@ -157,7 +157,7 @@ function newDesign(id, templateId, custom) {
     name: `${t.name} – ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
     mode: isAddr && data.addresses.length ? 'addresses' : 'same',
     text: isReturn ? myAddress() : '',
-    each: {}, addressIds: [], copiesEach: 1, sheets: 1, startAt: 0,
+    each: {}, addressIds: [], copiesEach: 1, sheets: 1, partial: false, used: [],
     style: { font: 'helvetica', size: isReturn ? 9 : t.h < 1.2 ? 12 : t.h < 2.5 ? 16 : 24, bold: false, italic: false,
       align: t.shape === 'round' || t.cat === 'badge' || t.cat === 'round' ? 'center' : 'left', color: '#000000' },
     picture: null,
@@ -178,8 +178,10 @@ export function labelEditorView({ id, templateId }) {
   }
   const t = design.templateId === 'custom' ? customTemplate(design.custom) : findTemplate(design.templateId);
   let selected = 0;      // label being typed on in "each" mode
-  let pickingStart = false;
   let page = 0;
+  // Older saved labels used "start at label N"; turn that into used labels.
+  if (design.startAt && !design.used) { design.used = Array.from({ length: design.startAt }, (_, i) => i); design.partial = true; }
+  delete design.startAt;
 
   const persist = () => {
     design.updated = Date.now();
@@ -220,7 +222,7 @@ export function labelEditorView({ id, templateId }) {
       ctx.beginPath();
       if (t.shape === 'round') ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2);
       else roundRect(ctx, r.x, r.y, r.w, r.h, Math.min(0.08, r.h * 0.1));
-      const isUsedSpot = page === 0 && i < (design.startAt || 0);
+      const isUsedSpot = page === 0 && plan.usedFirst.has(i);
       ctx.fillStyle = isUsedSpot ? '#e3e6ea' : '#ffffff';
       ctx.fill();
       ctx.lineWidth = 1.2 / scale;
@@ -230,9 +232,9 @@ export function labelEditorView({ id, templateId }) {
       ctx.setLineDash([]);
       if (isUsedSpot) {
         ctx.fillStyle = '#8a939e'; ctx.font = `${Math.min(r.h * 0.35, 0.16)}px Helvetica, Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('already used', r.x + r.w / 2, r.y + r.h / 2);
+        ctx.fillText(r.w > 1.2 ? 'already used' : 'used', r.x + r.w / 2, r.y + r.h / 2);
       }
-      if (design.mode === 'each' && i === selected && !pickingStart) {
+      if (design.mode === 'each' && i === selected) {
         ctx.lineWidth = 3 / scale; ctx.strokeStyle = '#1f4e79'; ctx.stroke();
       }
     }
@@ -258,7 +260,8 @@ export function labelEditorView({ id, templateId }) {
     prevBtn.disabled = page === 0; nextBtn.disabled = page >= plan.pages.length - 1;
     fitNote.innerHTML = '';
     if (shrunk) fitNote.append(h('p.note.small', 'ℹ️ Some writing was made a little smaller so it fits on the label.'));
-    hint.textContent = pickingStart ? '👆 Click the first EMPTY label on your sheet.' : design.mode === 'each' ? '👆 Click any label to type on it.' : '';
+    if (design.partial && (design.used || []).length >= t.count && design.mode !== 'each') fitNote.append(h('p.note.small', '⚠️ Every label on your sheet is marked as used, so this will print on a new sheet. Click the empty ones to use them.'));
+    hint.textContent = design.mode === 'each' ? '👆 Click any label to type on it.' : design.partial ? '👆 Click a label on the sheet to mark it used (grey) or empty.' : '';
   }
 
   canvas.addEventListener('click', (e) => {
@@ -268,12 +271,11 @@ export function labelEditorView({ id, templateId }) {
     for (let i = 0; i < t.count; i++) {
       const r = labelRect(t, i);
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-        if (pickingStart) {
-          design.startAt = i; pickingStart = false; page = 0; drawStart(); changed();
-          toast(i === 0 ? 'Printing will start at the first label' : `Printing will start at label ${i + 1}`);
-        } else if (design.mode === 'each') {
+        if (design.mode === 'each') {
           selected = i; drawContent(); redraw();
           setTimeout(() => { const ta = contentEl.querySelector('textarea'); if (ta) ta.focus(); }, 10);
+        } else if (design.partial && page === 0) {
+          toggleOne(i);
         }
         return;
       }
@@ -386,17 +388,63 @@ export function labelEditorView({ id, templateId }) {
       } }, e))))));
   };
 
-  // ---- step 4: sheet ----
+  // ---- step 4: sheet (which labels are already peeled off) ----
   const startEl = h('div.stack');
+  const usedSet = () => new Set(design.used || []);
+  const setUsed = (indices, makeUsed) => {
+    const s = usedSet();
+    for (const i of indices) { if (makeUsed) s.add(i); else s.delete(i); }
+    design.used = [...s].sort((a, b) => a - b);
+    page = 0; drawStart(); changed();
+  };
+  const toggleOne = (i) => setUsed([i], !usedSet().has(i));
+  // A whole row/column: if any label in it is still empty, mark them all used; otherwise make them all empty.
+  const toggleGroup = (indices) => setUsed(indices, indices.some(i => !usedSet().has(i)));
+  const rowIdx = (r) => Array.from({ length: t.cols }, (_, c) => r * t.cols + c);
+  const colIdx = (c) => Array.from({ length: t.rows }, (_, r) => r * t.cols + c);
+  const all = Array.from({ length: t.count }, (_, i) => i);
+
   const drawStart = () => {
     startEl.innerHTML = '';
-    if (design.mode === 'each') { startEl.append(h('p.muted.small', 'Leave a label empty and nothing prints there.')); return; }
-    const used = design.startAt || 0;
+    const s = usedSet();
+    const partial = !!design.partial;
+    startEl.append(h('div.picks',
+      h('button.pick' + (!partial ? '.on' : ''), { onclick: () => { design.partial = false; design.used = []; page = 0; drawStart(); changed(); } },
+        h('span.ico', '📄'), h('span', h('b', 'A brand-new sheet'), h('small', 'Every label is empty'))),
+      h('button.pick' + (partial ? '.on' : ''), { onclick: () => { design.partial = true; page = 0; drawStart(); changed(); } },
+        h('span.ico', '✂️'), h('span', h('b', 'A sheet I already used some of'), h('small', 'Show me which labels are gone')))));
+    if (!partial) return;
+
+    const free = t.count - s.size;
+    // cell size: fit the panel, keep the label's shape
+    const cw = Math.max(22, Math.min(64, Math.floor(300 / t.cols)));
+    const ch = Math.max(14, Math.min(48, Math.round(cw * t.h / t.w)));
+    const round = t.shape === 'round';
+    const grid = h('div.sheetmap', { style: { gridTemplateColumns: `2.6rem repeat(${t.cols}, ${cw}px)` }, role: 'group', 'aria-label': 'Your label sheet' });
+    grid.append(h('span'));
+    for (let c = 0; c < t.cols; c++) {
+      const allUsed = colIdx(c).every(i => s.has(i));
+      grid.append(h('button.mapbtn.colbtn' + (allUsed ? '.off' : ''), { title: `Whole column ${c + 1}`, 'aria-label': `Whole column ${c + 1}`, onclick: () => toggleGroup(colIdx(c)) }, '⬇'));
+    }
+    for (let r = 0; r < t.rows; r++) {
+      const allUsed = rowIdx(r).every(i => s.has(i));
+      grid.append(h('button.mapbtn.rowbtn' + (allUsed ? '.off' : ''), { title: `Whole row ${r + 1}`, 'aria-label': `Whole row ${r + 1}`, style: { height: `${ch}px` }, onclick: () => toggleGroup(rowIdx(r)) }, '➡'));
+      for (let c = 0; c < t.cols; c++) {
+        const i = r * t.cols + c, isUsed = s.has(i);
+        grid.append(h('button.cell' + (isUsed ? '.used' : '') + (round ? '.round' : ''), {
+          style: { width: `${cw}px`, height: `${ch}px` },
+          'aria-label': `Label ${i + 1}: ${isUsed ? 'already used' : 'empty'}`, 'aria-pressed': isUsed ? 'true' : 'false',
+          onclick: () => toggleOne(i) }, isUsed ? '✕' : ''));
+      }
+    }
     startEl.append(
-      h('p', used ? `Printing starts at label ${used + 1}. The grey ones are skipped.` : 'Printing starts at the first label.'),
+      h('p', h('b', 'Click the labels that are already gone'), ' so they turn grey. Click ', h('b', '➡'), ' for a whole row or ', h('b', '⬇'), ' for a whole column. Click again to undo.'),
+      h('div.map-wrap', grid),
+      h('p', { style: { margin: 0 } }, h('b', `${free} empty label${free === 1 ? '' : 's'}`), ` on this sheet (${s.size} used).`),
       h('div.row',
-        h('button.btn' + (pickingStart ? '.on' : ''), { onclick: () => { pickingStart = !pickingStart; drawStart(); redraw(); } }, pickingStart ? '👆 Now click on the sheet' : '📄 My sheet is partly used'),
-        used ? h('button.btn', { onclick: () => { design.startAt = 0; drawStart(); changed(); } }, 'Start at the first label') : null));
+        h('button.btn', { onclick: () => setUsed(all, true) }, '✕ Mark all as used'),
+        h('button.btn', { onclick: () => setUsed(all, false) }, '↺ Make all empty')),
+      h('p.small.muted', { style: { margin: 0 } }, 'Only a few left? Click "Mark all as used", then click the empty ones. You can also click right on the big picture of the sheet.'));
   };
 
   // ---- name + print ----
