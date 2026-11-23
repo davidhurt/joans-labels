@@ -1,0 +1,51 @@
+import { h, isSafari } from '../ui.js';
+
+export function helpView() {
+  const safari = isSafari();
+  const S = (title, ...kids) => h('div.card', h('h2', title), ...kids);
+  return h('div.help',
+    h('div.page-head', h('h1', '❓ Help')),
+    S('📌 Put this app on your Dock (do this once)',
+      safari ? [
+        h('ol',
+          h('li', 'At the very top of the screen, click ', h('b', 'File'), '.'),
+          h('li', 'Click ', h('b', 'Add to Dock…'), ' then click ', h('b', 'Add'), '.'),
+          h('li', 'Now there is a Labels & Letters picture at the bottom of your screen. Click it any time to open the app.')),
+      ] : [
+        h('ol',
+          h('li', 'Look at the right end of the address bar at the top for a small ', h('b', 'install'), ' icon (a little screen with an arrow), and click it. Or click the ', h('b', '⋮'), ' menu → ', h('b', 'Cast, save and share'), ' → ', h('b', 'Install page as app'), '.'),
+          h('li', 'Click ', h('b', 'Install'), '.'),
+          h('li', 'To keep it on your Dock: right-click its icon in the Dock → ', h('b', 'Options'), ' → ', h('b', 'Keep in Dock'), '.')),
+      ],
+      h('p.muted.small', 'Or just bookmark this page: press ', h('kbd', '⌘'), ' + ', h('kbd', 'D'), '.')),
+    S('🏷️ Printing labels',
+      h('ol',
+        h('li', 'Click ', h('b', 'Labels'), ' at the top.'),
+        h('li', 'Type the number from the front of your Avery package (like ', h('b', '5160'), ') and click the matching picture.'),
+        h('li', 'Choose what goes on the labels: people from your Address Book, the same thing on every label, or something different on each.'),
+        h('li', 'Look at the picture of the sheet on the right — that is what will print.'),
+        h('li', 'The first time, click ', h('b', 'Test print on plain paper'), '. Hold the paper behind a label sheet up to a window to see if it lines up.'),
+        h('li', 'Put the label sheet in the printer and click ', h('b', 'Print labels'), '.')),
+      h('p', h('b', 'Used some labels already? '), 'Click ', h('b', 'My sheet is partly used'), ' and then click the first empty label on the picture.')),
+    S('✉️ Printing envelopes',
+      h('ol',
+        h('li', 'Click ', h('b', 'Envelopes'), ' and pick your envelope size.'),
+        h('li', 'Pick who it is going to (you can pick many people at once).'),
+        h('li', 'Click ', h('b', 'Print envelopes'), '. In the print window, choose the envelope size under ', h('b', 'Paper Size'), '.'),
+        h('li', 'Put the envelope in the printer the way the little picture on your printer shows.'))),
+    S('📝 Writing letters',
+      h('ol',
+        h('li', 'Click ', h('b', 'Letters'), ' → ', h('b', 'Write a new letter'), ' and pick the kind of letter.'),
+        h('li', 'Click on a yellow part and type to replace it.'),
+        h('li', 'Use the buttons at the top to make words bold, bigger, or a different color. Select the words first by dragging over them.'),
+        h('li', 'Your letter saves by itself. Find it later under ', h('b', 'My letters'), '.'),
+        h('li', 'Click ', h('b', 'Print'), ' to print it, or ', h('b', 'Envelope'), ' to print a matching envelope.'))),
+    S('🖨️ If printing looks wrong',
+      h('ul',
+        h('li', h('b', 'Labels a little off: '), 'go to ', h('a', { href: '#/settings' }, 'My Info & Printer Setup'), ' and use the move buttons. It remembers for next time.'),
+        h('li', h('b', 'Everything too small: '), 'in the print window make sure ', h('b', 'Scale'), ' is ', h('b', '100%'), ' (in Chrome: "Actual size").'),
+        h('li', h('b', 'Date or web address printed at the top of a letter: '), 'in the print window, turn off ', h('b', 'Print headers and footers'), ' (Chrome: under "More settings", uncheck "Headers and footers").'))),
+    S('💾 Your work is safe',
+      h('p', 'Everything saves by itself on this computer. Now and then, go to ', h('a', { href: '#/settings' }, 'My Info'), ' and click ', h('b', 'Save a backup file'), '.')),
+  );
+}

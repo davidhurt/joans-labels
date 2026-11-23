@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Joan's Labels &amp; Letters</title>
+  <meta name="description" content="Print Avery labels, envelopes and letters at home.">
+  <meta name="theme-color" content="#1f4e79">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-title" content="Labels &amp; Letters">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar no-print">
+    <a class="brand" href="#/">
+      <img src="icons/icon-192.png" alt="" width="40" height="40">
+      <span>Joan's Labels &amp; Letters</span>
+    </a>
+    <nav class="topnav" aria-label="Main">
+      <a href="#/" data-nav="home">🏠 Home</a>
+      <a href="#/labels" data-nav="labels">🏷️ Labels</a>
+      <a href="#/envelopes" data-nav="envelopes">✉️ Envelopes</a>
+      <a href="#/letters" data-nav="letters">📝 Letters</a>
+      <a href="#/addresses" data-nav="addresses">📇 Address Book</a>
+      <a href="#/help" data-nav="help">❓ Help</a>
+    </nav>
+  </header>
+  <main id="app" tabindex="-1"><p class="loading">Getting things ready…</p></main>
+  <div id="print-area" aria-hidden="true"></div>
+  <noscript><p style="font-size:22px;padding:24px">This app needs JavaScript turned on in your browser.</p></noscript>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
