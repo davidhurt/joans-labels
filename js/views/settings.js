@@ -61,8 +61,8 @@ export function settingsView() {
       catch (err) { toast(err.message || 'That file did not work.', 'bad'); }
     } });
 
-  const doBackup = () => {
-    const blob = new Blob([backupJSON()], { type: 'application/json' });
+  const doBackup = async () => {
+    const blob = new Blob([await backupJSON()], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `Labels-and-Letters-backup-${new Date().toISOString().slice(0, 10)}.json` });
     document.body.append(a); a.click(); a.remove();
     s.lastBackup = Date.now(); save('settings');

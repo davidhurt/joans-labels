@@ -31,7 +31,9 @@ export function readPhoto(file, maxPx = 1400) {
     fr.onerror = () => reject(fr.error);
     fr.onload = () => {
       const im = new Image();
-      im.onerror = () => reject(new Error('That file is not a picture this app can use.'));
+      im.onerror = () => reject(new Error(/hei[cf]/i.test(file.type + file.name)
+        ? 'This photo is in Apple’s HEIC format, which Chrome can’t open. Instead, open the Photos app and drag the photo straight onto your letter.'
+        : 'That file is not a picture this app can use.'));
       im.onload = () => {
         const k = Math.min(1, maxPx / Math.max(im.width, im.height));
         const w = Math.round(im.width * k), h = Math.round(im.height * k);

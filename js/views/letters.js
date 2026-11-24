@@ -1,6 +1,6 @@
-import { data, save, uid } from '../store.js';
+import { data, save, uid, putFile, getFile, delFile } from '../store.js';
 import { h, go, toast, modal, confirmBox, formatAddress, fmtDate, todayLong, esc } from '../ui.js';
-import { readPhoto } from '../pictures.js';
+import { readPhoto, CLIPART, emojiPng } from '../pictures.js';
 import { addressPicker } from './addresses.js';
 
 // ---------- templates ----------
@@ -58,14 +58,19 @@ function myLetters(redraw) {
   if (!data.letters.length) return h('div.card', h('p.lead', 'No letters yet.'), h('p', 'Letters you write are saved here by themselves.'));
   return h('div.list', [...data.letters].sort((a, b) => b.updated - a.updated).map(l => h('div.item',
     h('span.ico', '📝'),
-    h('a.t', { href: `#/letters/edit/${l.id}`, style: { color: 'inherit', textDecoration: 'none' } }, h('b', l.title), h('small', `changed ${fmtDate(l.updated)}`)),
+    h('a.t', { href: `#/letters/edit/${l.id}`, style: { color: 'inherit', textDecoration: 'none' } }, h('b', l.title), h('small', `changed ${fmtDate(l.updated)}`, (l.attachments || []).length ? ` · 📎 ${l.attachments.length} attached` : '')),
     h('a.btn.primary', { href: `#/letters/edit/${l.id}` }, 'Open'),
-    h('button.btn', { onclick: () => {
-      const c = { ...l, id: uid(), title: l.title + ' (copy)', created: Date.now(), updated: Date.now() };
+    h('button.btn', { onclick: async () => {
+      const c = { ...l, id: uid(), title: l.title + ' (copy)', created: Date.now(), updated: Date.now(), attachments: [] };
+      for (const a of l.attachments || []) {
+        const f = await getFile(a.id);
+        if (f) { const id = uid(); await putFile(id, f); c.attachments.push({ ...a, id }); }
+      }
       data.letters.push(c); save('letters', true); go(`#/letters/edit/${c.id}`);
     } }, '📄 Copy'),
     h('button.btn.danger', { onclick: async () => {
       if (await confirmBox('Delete this letter?', `"${l.title}" will be deleted. This cannot be undone.`, 'Yes, delete')) {
+        (l.attachments || []).forEach(a => delFile(a.id));
         data.letters = data.letters.filter(x => x.id !== l.id); save('letters', true); redraw(); toast('Deleted');
       } } }, '🗑️'))));
 }
@@ -110,34 +115,89 @@ export function cleanHtml(html) {
   return doc.body.firstChild.innerHTML;
 }
 
+// The writing choices in the toolbar. They stay set until she changes them.
+const SIZES = [['2', 'Small'], ['3', 'Normal'], ['4', 'Large'], ['5', 'Extra large'], ['6', 'Huge']];
+const FACES = [['Helvetica', 'Helvetica'], ['JL Lato', 'Modern'], ['Times New Roman', 'Classic'], ['JL Crimson', 'Elegant'],
+  ['Georgia', 'Book'], ['JL Patrick', 'Handwritten'], ['JL GreatVibes', 'Fancy Script'], ['Courier New', 'Typewriter']];
+const COLORS = [['#000000', 'Black'], ['#1f3c88', 'Blue'], ['#a3171e', 'Red'], ['#1d6b36', 'Green'], ['#6b3fa0', 'Purple']];
+const DEFAULT_PEN = { size: '3', face: 'Times New Roman', color: '#000000' };
+const MAX_FILE = 20 * 1024 * 1024;
+
+const firstFamily = (f) => String(f || '').split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+function toHex(c) {
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c || '');
+  if (!m) return String(c || '').toLowerCase();
+  return '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('');
+}
+/** What size, lettering and color the writing has at this spot. */
+export function formatAt(node, root) {
+  const out = { size: null, face: null, color: null };
+  for (let el = node && (node.nodeType === 1 ? node : node.parentElement); el && el !== root && root.contains(el); el = el.parentElement) {
+    if (!out.size && el.tagName === 'FONT' && el.getAttribute('size')) out.size = el.getAttribute('size');
+    if (!out.face) { const f = (el.tagName === 'FONT' && el.getAttribute('face')) || el.style.fontFamily; if (f) out.face = firstFamily(f); }
+    if (!out.color) { const c = (el.tagName === 'FONT' && el.getAttribute('color')) || el.style.color; if (c) out.color = toHex(c); }
+  }
+  return { size: out.size || DEFAULT_PEN.size, face: out.face || DEFAULT_PEN.face.toLowerCase(), color: out.color || DEFAULT_PEN.color };
+}
+const fmtSize = (n) => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+const fileIcon = (t, name) => /^image\//.test(t) ? '🖼️' : /pdf/.test(t) ? '📕' : /word|\.docx?$|\.pages$/i.test(t + name) ? '📘' : /sheet|excel|csv|\.numbers$/i.test(t + name) ? '📗' : '📄';
+// Only pictures and PDFs open inside the browser; anything else is saved to Downloads.
+const opensInBrowser = (t) => /^image\/(png|jpe?g|gif|webp)$/.test(t) || t === 'application/pdf';
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
+}
+async function dataUrlToBlob(url, type) { const b = await (await fetch(url)).blob(); return new Blob([b], { type }); }
+
 export function letterEditorView(id) {
   const l = data.letters.find(x => x.id === id);
   if (!l) { setTimeout(() => go('#/letters'), 0); return h('p', 'Not found.'); }
+  l.attachments = l.attachments || [];
+  const pen = { ...DEFAULT_PEN, ...(l.pen || {}) };
   const savedNote = h('span.small.muted', '✔ Saved');
   const paper = h('div.paper', { contentEditable: 'true', spellcheck: true, html: cleanHtml(l.html), 'aria-label': 'Your letter' });
 
   const persist = () => {
-    l.html = paper.innerHTML; l.updated = Date.now(); save('letters');
+    l.html = paper.innerHTML; l.pen = { ...pen }; l.updated = Date.now(); save('letters');
     savedNote.textContent = '✔ Saved';
   };
-  // When she starts typing in a yellow blank, turn it into plain text first
-  // (otherwise the browser copies the yellow color onto her words).
-  paper.addEventListener('beforeinput', () => {
+  let applying = false;
+  paper.addEventListener('beforeinput', (e) => {
+    if (applying) return;
     const s = getSelection();
     if (!s.rangeCount) return;
     const r = s.getRangeAt(0);
+    // When she starts typing in a yellow blank, turn it into plain text first
+    // (otherwise the browser copies the yellow color onto her words).
     const el = (n) => n && (n.nodeType === 1 ? n : n.parentElement);
     const fill = el(r.startContainer) && el(r.startContainer).closest('.fill');
-    if (!fill || !paper.contains(fill)) return;
-    const pre = document.createRange(); pre.selectNodeContents(fill); pre.setEnd(r.startContainer, r.startOffset);
-    const start = pre.toString().length;
-    const inEnd = fill.contains(r.endContainer);
-    let end = fill.textContent.length;
-    if (inEnd) { const pe = document.createRange(); pe.selectNodeContents(fill); pe.setEnd(r.endContainer, r.endOffset); end = pe.toString().length; }
-    const txt = document.createTextNode(fill.textContent);
-    fill.replaceWith(txt);
-    const nr = document.createRange(); nr.setStart(txt, start); nr.setEnd(txt, inEnd ? end : start);
-    s.removeAllRanges(); s.addRange(nr);
+    if (fill && paper.contains(fill)) {
+      const pre = document.createRange(); pre.selectNodeContents(fill); pre.setEnd(r.startContainer, r.startOffset);
+      const start = pre.toString().length;
+      const inEnd = fill.contains(r.endContainer);
+      let end = fill.textContent.length;
+      if (inEnd) { const pe = document.createRange(); pe.selectNodeContents(fill); pe.setEnd(r.endContainer, r.endOffset); end = pe.toString().length; }
+      const txt = document.createTextNode(fill.textContent);
+      fill.replaceWith(txt);
+      const nr = document.createRange(); nr.setStart(txt, start); nr.setEnd(txt, inEnd ? end : start);
+      s.removeAllRanges(); s.addRange(nr);
+    }
+    // New writing uses the size, lettering and color chosen in the toolbar
+    // (a yellow blank keeps its own look, like a big heading).
+    if (fill || e.inputType !== 'insertText' || !e.data) return;
+    const sel = s.getRangeAt(0);
+    const at = formatAt(sel.collapsed ? sel.startContainer : sel.commonAncestorContainer, paper);
+    const need = [];
+    if (at.size !== pen.size) need.push(['fontSize', pen.size]);
+    if (at.face !== pen.face.toLowerCase()) need.push(['fontName', pen.face]);
+    if (at.color !== pen.color.toLowerCase()) need.push(['foreColor', pen.color]);
+    if (!need.length) return;
+    e.preventDefault();
+    applying = true;
+    try {
+      if (!sel.collapsed) document.execCommand('delete');
+      need.forEach(([c, v]) => document.execCommand(c, false, v));
+      document.execCommand('insertText', false, e.data);
+    } finally { applying = false; }
   });
   paper.addEventListener('input', () => {
     // A yellow blank stops being yellow once she types in it.
@@ -157,57 +217,171 @@ export function letterEditorView(id) {
     }
     if (e.target.tagName === 'IMG') { e.target.classList.add('sel'); selImg = e.target; imgBar.style.display = ''; }
   });
-  // Paste as plain text so odd formatting from email/web does not come in.
+  // Paste: a copied photo goes in as a picture; text comes in plain so odd formatting does not.
   paper.addEventListener('paste', (e) => {
-    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    const cd = e.clipboardData;
+    const img = cd && [...cd.files].find(f => /^image\//.test(f.type));
+    if (img) { e.preventDefault(); addPhoto(img); return; }
+    const text = cd && cd.getData('text/plain');
     if (text != null) { e.preventDefault(); document.execCommand('insertText', false, text); }
   });
+  // Drag a photo from the Photos app (or a file from Finder) onto the letter.
+  const desk = h('div.desk', paper);
+  desk.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); desk.classList.add('drop'); } });
+  desk.addEventListener('dragleave', () => desk.classList.remove('drop'));
+  desk.addEventListener('drop', (e) => {
+    desk.classList.remove('drop');
+    const files = e.dataTransfer ? [...e.dataTransfer.files] : [];
+    if (!files.length) return;
+    e.preventDefault();
+    const r = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (r && paper.contains(r.startContainer)) { const s = getSelection(); s.removeAllRanges(); s.addRange(r); savedRange = r.cloneRange(); }
+    files.forEach(f => /^image\//.test(f.type) || /\.hei[cf]$/i.test(f.name) ? addPhoto(f) : attachFile(f));
+  });
 
-  const cmd = (c, v) => () => { paper.focus(); document.execCommand(c, false, v); persist(); };
   const keepFocus = (el) => { el.addEventListener('mousedown', (e) => e.preventDefault()); return el; };
-  const B = (label, c, v, extra = {}) => keepFocus(h('button.btn', { onclick: cmd(c, v), title: extra.title || '', style: extra.style }, label));
+  const cmd = (c, v) => () => { paper.focus(); document.execCommand(c, false, v); persist(); syncButtons(); };
+  const B = (label, c, v, extra = {}) => keepFocus(h('button.btn', { onclick: cmd(c, v), title: extra.title || '', 'aria-label': extra.title || null }, label));
 
-  const sizeSel = h('select', { 'aria-label': 'Writing size', onchange: (e) => { paper.focus(); restoreSel(); document.execCommand('fontSize', false, e.target.value); e.target.value = ''; persist(); } },
-    h('option', { value: '' }, 'Size…'),
-    h('option', { value: '2' }, 'Small'), h('option', { value: '3' }, 'Normal'), h('option', { value: '4' }, 'Large'),
-    h('option', { value: '5' }, 'Extra large'), h('option', { value: '6' }, 'Huge'));
-  const fontSel = h('select', { 'aria-label': 'Lettering', onchange: (e) => { paper.focus(); restoreSel(); document.execCommand('fontName', false, e.target.value); e.target.value = ''; persist(); } },
-    h('option', { value: '' }, 'Lettering…'),
-    h('option', { value: 'Helvetica' }, 'Helvetica'),
-    h('option', { value: 'JL Lato' }, 'Modern'),
-    h('option', { value: 'Times New Roman' }, 'Classic'),
-    h('option', { value: 'JL Crimson' }, 'Elegant'),
-    h('option', { value: 'Georgia' }, 'Book'),
-    h('option', { value: 'JL Patrick' }, 'Handwritten'),
-    h('option', { value: 'JL GreatVibes' }, 'Fancy Script'),
-    h('option', { value: 'Courier New' }, 'Typewriter'));
-  // Remember the selection while a dropdown is open
+  // Remember the selection while a dropdown or pop-up is open
   let savedRange = null;
-  const remember = () => { const s = getSelection(); if (s.rangeCount && paper.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange(); };
+  const remember = () => { const s = getSelection(); if (s.rangeCount && paper.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange(); syncButtons(); };
   const restoreSel = () => { if (savedRange) { const s = getSelection(); s.removeAllRanges(); s.addRange(savedRange); } };
   document.addEventListener('selectionchange', remember);
-  const colorSel = h('select', { 'aria-label': 'Color', onchange: (e) => { paper.focus(); restoreSel(); document.execCommand('foreColor', false, e.target.value); e.target.value = ''; persist(); } },
-    h('option', { value: '' }, 'Color…'),
-    h('option', { value: '#000000' }, 'Black'), h('option', { value: '#1f3c88' }, 'Blue'), h('option', { value: '#a3171e' }, 'Red'), h('option', { value: '#1d6b36' }, 'Green'), h('option', { value: '#6b3fa0' }, 'Purple'));
 
-  const photoIn = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: async (e) => {
-    const f = e.target.files[0]; if (!f) return;
+  // Size / Lettering / Color: show the choice, keep it until changed.
+  const choose = (key, command) => (e) => {
+    pen[key] = e.target.value;
+    paper.focus(); restoreSel();
+    const s = getSelection();
+    if (s.rangeCount && !s.getRangeAt(0).collapsed) document.execCommand(command, false, pen[key]); // change the words she selected
+    showPen(); persist();
+  };
+  const pick = (label, key, command, list) => {
+    const sel = h('select', { 'aria-label': label, onchange: choose(key, command) }, list.map(([v, t]) => h('option', { value: v }, t)));
+    return { sel, node: h('label.tsel', h('span', label), sel) };
+  };
+  const size = pick('Size', 'size', 'fontSize', SIZES);
+  const face = pick('Lettering', 'face', 'fontName', FACES);
+  const color = pick('Color', 'color', 'foreColor', COLORS);
+  [...face.sel.options].forEach(o => { o.style.fontFamily = `"${o.value}"`; });
+  [...color.sel.options].forEach(o => { o.style.color = o.value; });
+  const showPen = () => {
+    size.sel.value = pen.size; face.sel.value = pen.face; color.sel.value = pen.color;
+    face.sel.style.fontFamily = `"${pen.face}"`;
+    color.sel.style.color = pen.color;
+  };
+  showPen();
+
+  const bold = B(h('b', 'B'), 'bold', null, { title: 'Bold' });
+  const ital = B(h('i', 'I'), 'italic', null, { title: 'Slanted' });
+  const under = B(h('u', 'U'), 'underline', null, { title: 'Underline' });
+  const syncButtons = () => {
+    const s = getSelection();
+    if (!s.rangeCount || !paper.contains(s.anchorNode)) return;
+    [[bold, 'bold'], [ital, 'italic'], [under, 'underline']].forEach(([b, c]) => {
+      let on = false; try { on = document.queryCommandState(c); } catch {}
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    });
+  };
+
+  // ---------- pictures ----------
+  const insertImg = (src, width, alt = '') => {
+    paper.focus(); restoreSel();
+    document.execCommand('insertHTML', false, `<img src="${src}" style="width:${width}" alt="${esc(alt)}">`);
+    persist();
+  };
+  const addPhoto = async (f) => {
     try {
       const p = await readPhoto(f, 1400);
-      paper.focus(); restoreSel();
-      document.execCommand('insertHTML', false, `<img src="${p.src}" style="width:3.5in" alt="">`);
-      persist(); toast('Picture added. Click it to make it bigger or smaller.');
+      insertImg(p.src, '3.5in');
+      toast('Picture added. Click it to make it bigger or smaller.');
     } catch (err) { toast(err.message, 'bad'); }
-    e.target.value = '';
+  };
+  const photoIn = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: (e) => {
+    const f = e.target.files[0]; if (f) addPhoto(f); e.target.value = '';
   } });
+  const clipartMenu = () => {
+    const m = modal('Choose a little picture', CLIPART.map(g => h('div', { style: { marginBottom: '1rem' } }, h('h3', g.group),
+      h('div.clip-grid', g.items.map(em => h('button', { onclick: () => { m.close(); insertImg(emojiPng(em, 256), '1in'); toast('Picture added. Click it to make it bigger or smaller.'); }, 'aria-label': 'Picture ' + em }, em))))), { wide: true });
+  };
+  const pictureMenu = () => {
+    remember();
+    const m = modal('Add a picture', [
+      h('div.tiles',
+        h('button.tile', { onclick: () => { m.close(); photoIn.click(); } }, h('span.ico', '🌄'), h('b', 'A photo'),
+          h('span', 'From your Photos library, or a picture saved on this computer')),
+        h('button.tile', { onclick: () => { m.close(); clipartMenu(); } }, h('span.ico', '🌸'), h('b', 'A little picture'),
+          h('span', 'Flowers, hearts, holidays and more'))),
+      h('div.note.info', { style: { marginTop: '1rem' } },
+        h('p', { style: { margin: '0 0 .4rem' } }, h('b', 'Finding your photos: '), 'after you click “A photo”, a window opens. Click ', h('b', 'Photos'), ' on the left side of that window to see your photo library.'),
+        h('p', { style: { margin: 0 } }, h('b', 'Or: '), 'open the Photos app, and drag a photo straight onto your letter.')),
+    ]);
+  };
 
   let selImg = null;
   const sizeImg = (w) => () => { if (selImg) { selImg.style.width = w; persist(); } };
   const imgBar = h('div.row', { style: { display: 'none' } }, h('b', 'Picture:'),
-    h('button.btn', { onclick: sizeImg('2in') }, 'Small'), h('button.btn', { onclick: sizeImg('3.5in') }, 'Medium'),
+    h('button.btn', { onclick: sizeImg('1in') }, 'Tiny'), h('button.btn', { onclick: sizeImg('2in') }, 'Small'), h('button.btn', { onclick: sizeImg('3.5in') }, 'Medium'),
     h('button.btn', { onclick: sizeImg('6.5in') }, 'Large'),
     h('button.btn', { onclick: () => { if (selImg) { selImg.style.display = 'block'; selImg.style.margin = '0 auto'; persist(); } } }, 'Center it'),
     h('button.btn.danger', { onclick: () => { if (selImg) { selImg.remove(); selImg = null; imgBar.style.display = 'none'; persist(); } } }, 'Remove'));
+
+  // ---------- attachments ----------
+  const attachBox = h('div.attach-box');
+  const attachIn = h('input', { type: 'file', multiple: true, style: { display: 'none' }, onchange: async (e) => {
+    for (const f of [...e.target.files]) await attachFile(f);
+    e.target.value = '';
+  } });
+  async function attachFile(f) {
+    if (f.size > MAX_FILE) { toast(`“${f.name}” is too big to attach (the limit is 20 MB).`, 'bad'); return; }
+    try {
+      const rec = { name: f.name, type: f.type || 'application/octet-stream', size: f.size, dataUrl: await readAsDataUrl(f) };
+      const aid = uid();
+      await putFile(aid, rec);
+      l.attachments.push({ id: aid, name: rec.name, type: rec.type, size: rec.size });
+      persist(); drawAttach();
+      toast(`📎 “${f.name}” is attached to this letter.`);
+    } catch (err) { console.error(err); toast('Sorry, that file could not be attached.', 'bad'); }
+  }
+  const openAttachment = async (a, print) => {
+    const f = await getFile(a.id);
+    if (!f) { toast('That file could not be found.', 'bad'); return; }
+    const blob = await dataUrlToBlob(f.dataUrl, opensInBrowser(f.type) ? f.type : 'application/octet-stream');
+    const url = URL.createObjectURL(blob);
+    setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    if (print && /^image\//.test(f.type)) {
+      const area = document.getElementById('print-area');
+      area.innerHTML = '';
+      area.append(h('div.print-photo', h('img', { src: url, alt: '' })));
+      setTimeout(() => window.print(), 300);
+      return;
+    }
+    if (opensInBrowser(f.type)) {
+      const w = window.open(url, '_blank');
+      if (!w) location.href = url;
+      if (print) toast('When it opens, press ⌘ and P together to print it.');
+      return;
+    }
+    const link = h('a', { href: url, download: f.name });
+    document.body.append(link); link.click(); link.remove();
+    toast(`“${f.name}” was saved to your Downloads folder. Open it from there.`);
+  };
+  const drawAttach = () => {
+    attachBox.innerHTML = '';
+    if (!l.attachments.length) return;
+    attachBox.append(h('h3', `📎 Attached to this letter (${l.attachments.length})`),
+      h('div.list', l.attachments.map(a => h('div.item',
+        h('span.ico', fileIcon(a.type, a.name)),
+        h('div.t', h('b', a.name), h('small', fmtSize(a.size))),
+        h('button.btn', { onclick: () => openAttachment(a, false) }, opensInBrowser(a.type) ? '👀 Open' : '📂 Open'),
+        /^image\//.test(a.type) || a.type === 'application/pdf' ? h('button.btn', { onclick: () => openAttachment(a, true) }, '🖨️ Print') : null,
+        h('button.btn.danger', { 'aria-label': 'Remove ' + a.name, onclick: async () => {
+          if (!await confirmBox('Remove this attachment?', `“${a.name}” will be taken off this letter.`, 'Yes, remove')) return;
+          l.attachments = l.attachments.filter(x => x.id !== a.id); delFile(a.id); persist(); drawAttach();
+        } }, '🗑️ Remove')))));
+  };
+  drawAttach();
 
   const titleIn = h('input.title-input', { type: 'text', value: l.title, 'aria-label': 'Name of this letter', oninput: (e) => { l.title = e.target.value || 'My letter'; persist(); } });
 
@@ -224,7 +398,10 @@ export function letterEditorView(id) {
     area.innerHTML = '<table class="print-page"><thead><tr><td class="pm"></td></tr></thead>'
       + `<tbody><tr><td class="pc">${paper.innerHTML}</td></tr></tbody>`
       + '<tfoot><tr><td class="pm"></td></tr></tfoot></table>';
-    setTimeout(() => { window.print(); }, 50);
+    setTimeout(() => {
+      window.print();
+      if (l.attachments.length) toast('📎 Attachments print separately — use the 🖨️ Print button next to each one.');
+    }, 50);
   };
 
   const envelope = () => {
@@ -246,18 +423,20 @@ export function letterEditorView(id) {
       h('div.grow', h('div.small.muted', 'Letter name'), titleIn),
       savedNote),
     h('div.toolbar',
-      B(h('b', 'B'), 'bold', null, { title: 'Bold' }), B(h('i', 'I'), 'italic', null, { title: 'Slanted' }), B(h('u', 'U'), 'underline', null, { title: 'Underline' }),
-      h('span.sep'), sizeSel, fontSel, colorSel,
+      bold, ital, under,
+      h('span.sep'), size.node, face.node, color.node,
       h('span.sep'), B('☰ Left', 'justifyLeft'), B('≡ Center', 'justifyCenter'), B('Right ☰', 'justifyRight'),
       h('span.sep'), B('• List', 'insertUnorderedList'),
-      keepFocus(h('button.btn', { onclick: () => { remember(); photoIn.click(); } }, '🖼️ Picture')), photoIn,
+      keepFocus(h('button.btn', { onclick: pictureMenu }, '🖼️ Picture')), photoIn,
+      keepFocus(h('button.btn', { onclick: () => { remember(); attachIn.click(); } }, '📎 Attach')), attachIn,
       h('span.sep'), B('↶ Undo', 'undo'), B('↷ Redo', 'redo'),
       h('span.grow'),
       h('button.btn', { onclick: envelope }, '✉️ Envelope'),
       h('button.btn.primary', { onclick: doPrint }, '🖨️ Print')),
     imgBar,
     paper.querySelector('.fill') || /class="fill"/.test(l.html) ? h('p.note.small', '💡 Click on a ', h('span', { style: { background: '#fff1a8', padding: '0 .3em' } }, 'yellow part'), ' and type to replace it. Spelling mistakes get a red line underneath — right-click (or Control-click) the word to fix it.') : null,
-    h('div.desk', paper),
+    attachBox,
+    desk,
     h('div.actions-bar',
       h('button.btn.big', { onclick: envelope }, '✉️ Print an envelope for this letter'),
       h('button.btn.big.primary', { onclick: doPrint }, '🖨️ Print letter')));

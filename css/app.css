@@ -225,6 +225,12 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
 .paper font[size="4"] { font-size: 16pt; }
 .paper font[size="5"] { font-size: 20pt; }
 .paper font[size="6"] { font-size: 26pt; }
+.toolbar .tsel { display: inline-flex; flex-direction: column; gap: 0; font-size: .72rem; font-weight: 700; color: var(--muted); line-height: 1.1; }
+.toolbar .tsel select { min-height: 40px; font-size: .95rem; font-weight: 600; color: #000; min-width: 7.5em; }
+.attach-box:empty { display: none; }
+.attach-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: .8rem 1rem; margin-bottom: 1rem; }
+.attach-box h3 { margin: 0 0 .6rem; }
+.desk.drop { outline: 4px dashed var(--brand); outline-offset: -8px; }
 .title-input { font-size: 1.2rem !important; font-weight: 700 !important; max-width: 520px; }
 
 /* ---------- modal ---------- */
@@ -278,6 +284,8 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
   #print-area td.pc { padding: 0 1in; }
   #print-area img { max-width: 100%; height: auto; page-break-inside: avoid; }
   #print-area .fill { background: none; box-shadow: none; }
+  #print-area .print-photo { width: 8.5in; height: 11in; padding: .5in; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+  #print-area .print-photo img { max-width: 7.5in; max-height: 10in; width: auto; height: auto; object-fit: contain; }
   #print-area font[size="2"] { font-size: 11pt; }
   #print-area font[size="3"] { font-size: 13pt; }
   #print-area font[size="4"] { font-size: 16pt; }

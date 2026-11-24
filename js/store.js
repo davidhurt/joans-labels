@@ -98,14 +98,44 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-export function backupJSON() {
-  return JSON.stringify({ app: 'joans-labels-letters', version: 1, saved: new Date().toISOString(), data }, null, 1);
+// ---------- attached files (kept apart from letters so typing stays fast) ----------
+const fileKey = (id) => 'file:' + id;
+export async function putFile(id, rec) {
+  if (useLocal) localStorage.setItem('jl_' + fileKey(id), JSON.stringify(rec));
+  else await idbSet(fileKey(id), rec);
+}
+export async function getFile(id) {
+  try {
+    return useLocal ? JSON.parse(localStorage.getItem('jl_' + fileKey(id)) || 'null') : (await idbGet(fileKey(id))) || null;
+  } catch { return null; }
+}
+export async function delFile(id) {
+  try {
+    if (useLocal) { localStorage.removeItem('jl_' + fileKey(id)); return; }
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(fileKey(id));
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+    });
+  } catch {}
+}
+const validFile = (r) => r && typeof r === 'object' && typeof r.name === 'string' && typeof r.dataUrl === 'string' && r.dataUrl.startsWith('data:');
+
+export async function backupJSON() {
+  const files = {};
+  for (const l of data.letters) for (const a of l.attachments || []) {
+    const f = await getFile(a.id);
+    if (f) files[a.id] = f;
+  }
+  return JSON.stringify({ app: 'joans-labels-letters', version: 2, saved: new Date().toISOString(), data, files }, null, 1);
 }
 
 export async function restoreJSON(text) {
   const obj = JSON.parse(text);
   if (!obj || obj.app !== 'joans-labels-letters' || !obj.data) throw new Error('This is not a backup file from this app.');
   for (const k of KEYS) if (obj.data[k] != null) data[k] = obj.data[k];
+  for (const [id, f] of Object.entries(obj.files || {})) if (validFile(f)) await putFile(id, f);
   await flushAll();
 }
 
