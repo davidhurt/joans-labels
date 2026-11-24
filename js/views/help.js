@@ -38,6 +38,7 @@ export function helpView() {
         h('li', 'Click ', h('b', 'Letters'), ' → ', h('b', 'Write a new letter'), ' and pick the kind of letter.'),
         h('li', 'Click on a yellow part and type to replace it.'),
         h('li', 'Use the buttons at the top to make words bold, bigger, or a different color. Select the words first by dragging over them.'),
+        h('li', h('b', 'To add a photo: '), 'open the ', h('b', 'Photos'), ' app, then drag the photo onto your letter and let go. You can also click ', h('b', '🖼️ Picture'), '.'),
         h('li', 'Your letter saves by itself. Find it later under ', h('b', 'My letters'), '.'),
         h('li', 'Click ', h('b', 'Print'), ' to print it, or ', h('b', 'Envelope'), ' to print a matching envelope.'))),
     S('🖨️ If printing looks wrong',

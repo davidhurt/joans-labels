@@ -230,7 +230,11 @@ input[type=checkbox], input[type=radio] { width: 1.4rem; height: 1.4rem; accent-
 .attach-box:empty { display: none; }
 .attach-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: .8rem 1rem; margin-bottom: 1rem; }
 .attach-box h3 { margin: 0 0 .6rem; }
+.desk { position: relative; }
 .desk.drop { outline: 4px dashed var(--brand); outline-offset: -8px; }
+.drop-msg { display: none; position: fixed; top: 45%; left: 50%; transform: translateX(-50%); z-index: 50; box-shadow: 0 6px 24px rgba(0,0,0,.3); background: var(--brand); color: #fff; font-weight: 700; font-size: 1.2rem; padding: .7rem 1.2rem; border-radius: 12px; pointer-events: none; }
+.desk.drop .drop-msg { display: block; }
+.photo-tip { margin: 0 0 1rem; }
 .title-input { font-size: 1.2rem !important; font-weight: 700 !important; max-width: 520px; }
 
 /* ---------- modal ---------- */

@@ -226,7 +226,7 @@ export function letterEditorView(id) {
     if (text != null) { e.preventDefault(); document.execCommand('insertText', false, text); }
   });
   // Drag a photo from the Photos app (or a file from Finder) onto the letter.
-  const desk = h('div.desk', paper);
+  const desk = h('div.desk', h('div.drop-msg', '📷 Let go to put the photo in your letter'), paper);
   desk.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); desk.classList.add('drop'); } });
   desk.addEventListener('dragleave', () => desk.classList.remove('drop'));
   desk.addEventListener('drop', (e) => {
@@ -436,6 +436,7 @@ export function letterEditorView(id) {
     imgBar,
     paper.querySelector('.fill') || /class="fill"/.test(l.html) ? h('p.note.small', '💡 Click on a ', h('span', { style: { background: '#fff1a8', padding: '0 .3em' } }, 'yellow part'), ' and type to replace it. Spelling mistakes get a red line underneath — right-click (or Control-click) the word to fix it.') : null,
     attachBox,
+    h('p.note.info.photo-tip', '📷 ', h('b', 'To add a photo: '), 'open the ', h('b', 'Photos'), ' app, then drag the photo onto your letter and let go. (Or click ', h('b', '🖼️ Picture'), ' above.)'),
     desk,
     h('div.actions-bar',
       h('button.btn.big', { onclick: envelope }, '✉️ Print an envelope for this letter'),
